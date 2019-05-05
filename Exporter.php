@@ -65,10 +65,12 @@ class Exporter
                     'title'   => $post->post_title,
                     'content' => wpautop($post->post_content),
                     'author'  => $author,
-                    'categories' => wp_list_pluck(get_the_category($post->ID), 'slug'),
-                    'tags'       => wp_list_pluck(get_the_tags($post->ID), 'slug'),
                 ),
             );
+
+            foreach($this->postTaxonomyTerms($post) as $taxonomy => $terms) {
+                $this->collections[$slug]["/{$slug}/" . $post->post_name]['data'][$taxonomy] = $terms;
+            }
 
             foreach ($this->metadata('post', $post) as $key => $meta) {
                 $this->collections[$slug]["/{$slug}/" . $post->post_name]['data'][$key] = reset($meta);
@@ -101,15 +103,10 @@ class Exporter
 
     private function setTaxonomies()
     {
-        $categories = get_categories(array('hide_empty' => false));
-        $tags       = get_tags(array('hide_empty' => false));
+        $taxonomies = get_taxonomies();
 
-        $this->taxonomies['categories'] = $this->mapWithKeys($categories, function ($category) {
-            return array($category->slug => array('title' => $category->name));
-        });
-
-        $this->taxonomies['tags'] = $this->mapWithKeys($tags, function ($tag) {
-            return array($tag->slug => array('title' => $tag->name));
+        $this->taxonomies = $this->mapWithKeys($taxonomies, function($taxonomy) {
+            return array($taxonomy => get_terms($taxonomy));
         });
     }
 
@@ -174,6 +171,15 @@ class Exporter
         }
 
         mkdir(ABSPATH . static::PREFIX, 0777, true);
+    }
+
+    public function postTaxonomyTerms($post)
+    {
+        $taxonomies = get_object_taxonomies($post);
+        return $this->mapWithKeys($taxonomies, function($taxonomy) use ($post) {
+            $postTerms = wp_get_post_terms($post->ID, $taxonomy);
+            return array($taxonomy => is_array($postTerms) ? wp_list_pluck($postTerms, 'name') : []);
+        });
     }
 
     private function metadata($type, $post)
